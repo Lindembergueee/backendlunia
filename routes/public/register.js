@@ -55,7 +55,7 @@ async function registerHandler(req, reply) {
     req.log.info(`Verificando duplicidade para o usuário: ${accountName}`);
     const existingUser = await mainPool.request()
       .input('accountName', mssql.NVarChar, accountName)
-      .query('SELECT 1 FROM tblAccounts WHERE accountName = @accountName');
+      .query('SELECT 1 FROM Accounts WHERE accountName = @accountName');
 
     if (existingUser.recordset.length > 0) {
       req.log.warn(`Usuário ${accountName} já existe no banco de dados.`);
@@ -72,7 +72,7 @@ async function registerHandler(req, reply) {
       .input('password', mssql.NVarChar, hashedPassword)
       .input('nCash', mssql.Int, 0)
       .query(`
-        INSERT INTO tblAccounts (accountName, isNexonId, vip, getvip, password, nCash)
+        INSERT INTO Accounts (accountName, isNexonId, vip, getvip, password, nCash)
         VALUES (@accountName, @isNexonId, @vip, @getvip, @password, @nCash)
       `);
 
