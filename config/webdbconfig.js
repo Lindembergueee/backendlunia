@@ -7,7 +7,7 @@ const webDbConfig = {
   port: parseInt(process.env.WEB_DB_PORT),
   options: {
     encrypt: true,
-    trustServerCertificate: true,
+    trustServerCertificate: false,
     enableArithAbort: true
   }
 };
