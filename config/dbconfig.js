@@ -5,8 +5,8 @@ module.exports = {
   database: process.env.DB_NAME,
   port: parseInt(process.env.DB_PORT),
   options: {
-    encrypt: false,
-    enableArithAbort: true
+    encrypt: true,
+    enableArithAbort: false
   }
 };
 
