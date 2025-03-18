@@ -19,7 +19,15 @@ async function verifyApiKey(req, reply) {
 
 // Função principal do registro
 async function registerHandler(req, reply) {
-  const { accountName, password, isAdmin = false } = req.body;
+  // Recebendo os campos do body, incluindo as novas preferências de região
+  const {
+    accountName,
+    password,
+    isAdmin = false,
+    preferenceRegion1,
+    preferenceRegion2,
+  } = req.body;
+
   const salt = process.env.SALT_FIX;
 
   req.log.info('Iniciando handler de registro');
@@ -27,7 +35,9 @@ async function registerHandler(req, reply) {
   // Validação de campos obrigatórios
   if (!accountName || !password) {
     req.log.warn('Parâmetro faltando: accountName ou password');
-    return reply.status(400).send({ message: 'Nome da conta e senha são obrigatórios.' });
+    return reply
+      .status(400)
+      .send({ message: 'Nome da conta e senha são obrigatórios.' });
   }
 
   // Captura do IP do cliente
@@ -62,7 +72,7 @@ async function registerHandler(req, reply) {
       return reply.status(400).send({ message: 'Usuário já existe.' });
     }
 
-    // Inserção em Accounts
+    // Inserção na tabela "Accounts"
     req.log.info('Inserindo registro na tabela Accounts...');
     await mainPool.request()
       .input('accountName', mssql.NVarChar, accountName)
@@ -71,9 +81,30 @@ async function registerHandler(req, reply) {
       .input('getvip', mssql.Bit, 0)
       .input('password', mssql.NVarChar, hashedPassword)
       .input('nCash', mssql.Int, 0)
+      // Novos campos
+      .input('preferenceRegion1', mssql.NVarChar, preferenceRegion1 || null)
+      .input('preferenceRegion2', mssql.NVarChar, preferenceRegion2 || null)
       .query(`
-        INSERT INTO Accounts (accountName, isNexonId, vip, getvip, password, nCash)
-        VALUES (@accountName, @isNexonId, @vip, @getvip, @password, @nCash)
+        INSERT INTO Accounts (
+          accountName,
+          isNexonId,
+          vip,
+          getvip,
+          password,
+          nCash,
+          preferenceRegion1,
+          preferenceRegion2
+        )
+        VALUES (
+          @accountName,
+          @isNexonId,
+          @vip,
+          @getvip,
+          @password,
+          @nCash,
+          @preferenceRegion1,
+          @preferenceRegion2
+        )
       `);
 
     // Testar acesso direto à tabela Register_v1
@@ -81,7 +112,7 @@ async function registerHandler(req, reply) {
     await webPool.request().query('SELECT TOP 1 * FROM Web_v1.dbo.Register_v1');
     req.log.info('Tabela Register_v1 acessível com sucesso.');
 
-    // Inserir em Register_v1
+    // Inserção na tabela "Register_v1"
     req.log.info('Inserindo registro na tabela Register_v1...');
     await webPool.request()
       .input('accountName', mssql.NVarChar, accountName)
@@ -90,21 +121,44 @@ async function registerHandler(req, reply) {
       .input('password', mssql.NVarChar, hashedPassword)
       .input('nCash', mssql.Int, 0)
       .input('isAdmin', mssql.Bit, isAdmin)
+      // Novos campos
+      .input('preferenceRegion1', mssql.NVarChar, preferenceRegion1 || null)
+      .input('preferenceRegion2', mssql.NVarChar, preferenceRegion2 || null)
       .query(`
-        INSERT INTO Web_v1.dbo.Register_v1 (accountName, userHash, userIP, password, nCash, isAdmin)
-        VALUES (@accountName, @userHash, @userIP, @password, @nCash, @isAdmin)
+        INSERT INTO Web_v1.dbo.Register_v1 (
+          accountName,
+          userHash,
+          userIP,
+          password,
+          nCash,
+          isAdmin,
+          preferenceRegion1,
+          preferenceRegion2
+        )
+        VALUES (
+          @accountName,
+          @userHash,
+          @userIP,
+          @password,
+          @nCash,
+          @isAdmin,
+          @preferenceRegion1,
+          @preferenceRegion2
+        )
       `);
 
     req.log.info('Usuário registrado com sucesso!');
     reply.status(201).send({
       message: 'Registro bem-sucedido!',
-      userHash: userHash
+      userHash: userHash,
     });
 
   } catch (err) {
     req.log.error(`Erro no processo de registro: ${err.message}`);
     req.log.debug(err.stack);
-    reply.status(500).send({ message: 'Erro ao conectar ao banco de dados ou inserir dados.' });
+    reply
+      .status(500)
+      .send({ message: 'Erro ao conectar ao banco de dados ou inserir dados.' });
   } finally {
     // Fechando conexões
     if (mainPool) {
