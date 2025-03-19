@@ -21,7 +21,7 @@ async function verifyApiKey(req, reply) {
   req.log.info("API Key is valid.");
 }
 
-// Lista de regiões permitidas, se você quiser manter a validação
+// Lista de regiões permitidas
 const validPreferences = ["StageBR", "StageNA", "StageAS"];
 
 async function registerHandler(req, reply) {
@@ -29,28 +29,27 @@ async function registerHandler(req, reply) {
   req.log.info("=== [Register Handler] BODY RECEIVED ===");
   req.log.info(req.body);
 
+  // Agora esperamos que o front envie "serverPreference1" e "serverPreference2"
   const {
     accountName,
     password,
-    // Do front-end vem "preferenceRegion1"/"preferenceRegion2",
-    // mas precisamos salvar no banco em "serverPreference1"/"serverPreference2"
-    preferenceRegion1,
-    preferenceRegion2,
+    serverPreference1,
+    serverPreference2,
     isAdmin = false,
   } = req.body;
 
   req.log.info(`[REGISTER] Campos recebidos: 
     accountName="${accountName}", 
     password=(oculto), 
-    preferenceRegion1="${preferenceRegion1}", 
-    preferenceRegion2="${preferenceRegion2}", 
+    serverPreference1="${serverPreference1}", 
+    serverPreference2="${serverPreference2}", 
     isAdmin=${isAdmin}
   `);
 
   const salt = process.env.SALT_FIX;
   req.log.info('Iniciando handler de registro...');
 
-  // Validação de campos obrigatórios
+  // Validação dos campos obrigatórios
   if (!accountName || !password) {
     req.log.warn(`Faltando accountName ou password: ${accountName}, (password oculto)`);
     return reply.status(400).send({
@@ -58,8 +57,7 @@ async function registerHandler(req, reply) {
     });
   }
 
-  // Se as colunas forem obrigatórias e devem estar entre os valores permitidos
-  if (!preferenceRegion1 || !preferenceRegion2) {
+  if (!serverPreference1 || !serverPreference2) {
     req.log.warn('Faltando serverPreference1 ou serverPreference2');
     return reply.status(400).send({
       message: 'As preferências de região são obrigatórias.'
@@ -67,8 +65,8 @@ async function registerHandler(req, reply) {
   }
 
   if (
-    !validPreferences.includes(preferenceRegion1) ||
-    !validPreferences.includes(preferenceRegion2)
+    !validPreferences.includes(serverPreference1) ||
+    !validPreferences.includes(serverPreference2)
   ) {
     req.log.warn('Valor inválido para região preferencial.');
     return reply.status(400).send({
@@ -86,18 +84,17 @@ async function registerHandler(req, reply) {
 
   let mainPool, webPool;
   try {
-    // Conexões com os bancos de dados
     req.log.info('Tentando conectar aos bancos de dados...');
     mainPool = await mssql.connect(dbConfig);
     webPool = await mssql.connect(webDbConfig);
     req.log.info('Conexões com os bancos de dados estabelecidas com sucesso');
 
-    // Hash da senha e userHash
+    // Gerar hash da senha e userHash
     const hashedPassword = generateMD5(password, salt);
     const userHash = generateMD5(accountName + new Date().toISOString(), salt).substring(0, 6);
     req.log.debug(`[REGISTER] hashedPassword gerada, userHash="${userHash}"`);
 
-    // Verificar se o usuário já existe em Accounts
+    // Verificar duplicidade do usuário
     req.log.info(`[REGISTER] Verificando duplicidade para o usuário: ${accountName}`);
     const existingUser = await mainPool.request()
       .input('accountName', mssql.NVarChar, accountName)
@@ -108,10 +105,10 @@ async function registerHandler(req, reply) {
       return reply.status(400).send({ message: 'Usuário já existe.' });
     }
 
-    // Inserção na tabela "Accounts"
+    // Inserção na tabela Accounts
     req.log.info(`[REGISTER] Inserindo registro na tabela Accounts...
-      > serverPreference1="${preferenceRegion1}"
-      > serverPreference2="${preferenceRegion2}"`);
+      > serverPreference1="${serverPreference1}"
+      > serverPreference2="${serverPreference2}"`);
 
     await mainPool.request()
       .input('accountName', mssql.NVarChar, accountName)
@@ -120,9 +117,8 @@ async function registerHandler(req, reply) {
       .input('getvip', mssql.Bit, 0)
       .input('password', mssql.NVarChar, hashedPassword)
       .input('nCash', mssql.Int, 0)
-      // Aqui renomeamos p/ "serverPreference1"/"serverPreference2"
-      .input('serverPreference1', mssql.NVarChar, preferenceRegion1)
-      .input('serverPreference2', mssql.NVarChar, preferenceRegion2)
+      .input('serverPreference1', mssql.NVarChar, serverPreference1)
+      .input('serverPreference2', mssql.NVarChar, serverPreference2)
       .query(`
         INSERT INTO Accounts (
           accountName,
@@ -151,11 +147,10 @@ async function registerHandler(req, reply) {
     await webPool.request().query('SELECT TOP 1 * FROM Web_v1.dbo.Register_v1');
     req.log.info('Tabela Register_v1 acessível com sucesso.');
 
-    // Se a tabela Register_v1 também tiver colunas serverPreference1/serverPreference2,
-    // faça o mesmo. Caso ainda sejam "preferenceRegion1"/"preferenceRegion2", ajuste.
+    // Inserção na tabela Register_v1
     req.log.info(`[REGISTER] Inserindo registro na tabela Register_v1...
-      > serverPreference1="${preferenceRegion1}"
-      > serverPreference2="${preferenceRegion2}"`);
+      > serverPreference1="${serverPreference1}"
+      > serverPreference2="${serverPreference2}"`);
 
     await webPool.request()
       .input('accountName', mssql.NVarChar, accountName)
@@ -164,8 +159,8 @@ async function registerHandler(req, reply) {
       .input('password', mssql.NVarChar, hashedPassword)
       .input('nCash', mssql.Int, 0)
       .input('isAdmin', mssql.Bit, isAdmin)
-      .input('serverPreference1', mssql.NVarChar, preferenceRegion1)
-      .input('serverPreference2', mssql.NVarChar, preferenceRegion2)
+      .input('serverPreference1', mssql.NVarChar, serverPreference1)
+      .input('serverPreference2', mssql.NVarChar, serverPreference2)
       .query(`
         INSERT INTO Web_v1.dbo.Register_v1 (
           accountName,
@@ -202,7 +197,6 @@ async function registerHandler(req, reply) {
       message: 'Erro ao conectar ao banco de dados ou inserir dados.'
     });
   } finally {
-    // Fechando conexões
     if (mainPool) {
       req.log.info('Fechando conexão com o banco de dados principal...');
       mainPool.close();
