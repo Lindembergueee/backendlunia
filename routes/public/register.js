@@ -19,6 +19,7 @@ async function verifyApiKey(req, reply) {
   req.log.info("API Key is valid.");
 }
 
+// Lista de regiões permitidas, se você quiser manter a validação
 const validPreferences = ["StageBR", "StageNA", "StageAS"];
 
 async function registerHandler(req, reply) {
@@ -28,6 +29,8 @@ async function registerHandler(req, reply) {
   const {
     accountName,
     password,
+    // No front-end ainda chamamos de "preferenceRegion1"/"preferenceRegion2",
+    // mas internamente vamos tratar como "serverPreference1"/"serverPreference2"
     preferenceRegion1,
     preferenceRegion2,
     isAdmin = false,
@@ -45,16 +48,14 @@ async function registerHandler(req, reply) {
     });
   }
 
-  // Validação obrigatória das regiões
-  req.log.debug('Verificando campos de região preferencial');
+  // Se as colunas forem obrigatórias e devem estar entre os valores permitidos
   if (!preferenceRegion1 || !preferenceRegion2) {
-    req.log.warn('Parâmetro faltando: preferenceRegion1 ou preferenceRegion2');
+    req.log.warn('Faltando serverPreference1 ou serverPreference2');
     return reply.status(400).send({
       message: 'As preferências de região são obrigatórias.'
     });
   }
 
-  // Checagem se as preferências estão na lista válida
   if (
     !validPreferences.includes(preferenceRegion1) ||
     !validPreferences.includes(preferenceRegion2)
@@ -106,8 +107,9 @@ async function registerHandler(req, reply) {
       .input('getvip', mssql.Bit, 0)
       .input('password', mssql.NVarChar, hashedPassword)
       .input('nCash', mssql.Int, 0)
-      .input('preferenceRegion1', mssql.NVarChar, preferenceRegion1)
-      .input('preferenceRegion2', mssql.NVarChar, preferenceRegion2)
+      // Aqui renomeamos p/ "serverPreference1"/"serverPreference2"
+      .input('serverPreference1', mssql.NVarChar, preferenceRegion1)
+      .input('serverPreference2', mssql.NVarChar, preferenceRegion2)
       .query(`
         INSERT INTO Accounts (
           accountName,
@@ -116,8 +118,8 @@ async function registerHandler(req, reply) {
           getvip,
           password,
           nCash,
-          preferenceRegion1,
-          preferenceRegion2
+          serverPreference1,
+          serverPreference2
         )
         VALUES (
           @accountName,
@@ -126,8 +128,8 @@ async function registerHandler(req, reply) {
           @getvip,
           @password,
           @nCash,
-          @preferenceRegion1,
-          @preferenceRegion2
+          @serverPreference1,
+          @serverPreference2
         )
       `);
 
@@ -136,7 +138,9 @@ async function registerHandler(req, reply) {
     await webPool.request().query('SELECT TOP 1 * FROM Web_v1.dbo.Register_v1');
     req.log.info('Tabela Register_v1 acessível com sucesso.');
 
-    // Inserção na tabela "Register_v1"
+    // Se a tabela Register_v1 também tiver colunas serverPreference1/serverPreference2,
+    // faça o mesmo. Caso ainda sejam "preferenceRegion1"/"preferenceRegion2" lá,
+    // ajuste conforme o nome real da coluna.
     req.log.info('Inserindo registro na tabela Register_v1...');
     await webPool.request()
       .input('accountName', mssql.NVarChar, accountName)
@@ -145,8 +149,9 @@ async function registerHandler(req, reply) {
       .input('password', mssql.NVarChar, hashedPassword)
       .input('nCash', mssql.Int, 0)
       .input('isAdmin', mssql.Bit, isAdmin)
-      .input('preferenceRegion1', mssql.NVarChar, preferenceRegion1)
-      .input('preferenceRegion2', mssql.NVarChar, preferenceRegion2)
+      // Ajuste se em Register_v1 as colunas também são serverPreference1/2:
+      .input('serverPreference1', mssql.NVarChar, preferenceRegion1)
+      .input('serverPreference2', mssql.NVarChar, preferenceRegion2)
       .query(`
         INSERT INTO Web_v1.dbo.Register_v1 (
           accountName,
@@ -155,8 +160,8 @@ async function registerHandler(req, reply) {
           password,
           nCash,
           isAdmin,
-          preferenceRegion1,
-          preferenceRegion2
+          serverPreference1,
+          serverPreference2
         )
         VALUES (
           @accountName,
@@ -165,8 +170,8 @@ async function registerHandler(req, reply) {
           @password,
           @nCash,
           @isAdmin,
-          @preferenceRegion1,
-          @preferenceRegion2
+          @serverPreference1,
+          @serverPreference2
         )
       `);
 
