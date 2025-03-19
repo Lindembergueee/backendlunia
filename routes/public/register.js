@@ -11,15 +11,20 @@ function generateMD5(input, salt) {
 // Middleware para validar API_KEY
 async function verifyApiKey(req, reply) {
   const apiKey = req.headers['x-api-key'];
+  req.log.info("Verifying API key...");
   if (!apiKey || apiKey !== process.env.API_KEY) {
     req.log.warn('Acesso negado: API_KEY inválida ou ausente');
     return reply.status(401).send({ message: 'Unauthorized: Invalid API_KEY' });
   }
+  req.log.info("API Key is valid.");
 }
 
 const validPreferences = ["StageBR", "StageNA", "StageAS"];
 
 async function registerHandler(req, reply) {
+  // Log dos dados recebidos
+  req.log.info("Body received:", req.body);
+
   const {
     accountName,
     password,
@@ -27,20 +32,21 @@ async function registerHandler(req, reply) {
     preferenceRegion2,
     isAdmin = false,
   } = req.body;
-  
+
   const salt = process.env.SALT_FIX;
 
   req.log.info('Iniciando handler de registro');
 
   // Validação de campos obrigatórios
   if (!accountName || !password) {
-    req.log.warn('Parâmetro faltando: accountName ou password');
+    req.log.warn(`Faltando accountName ou password: ${accountName}, ${password}`);
     return reply.status(400).send({
       message: 'Nome da conta e senha são obrigatórios.'
     });
   }
 
   // Validação obrigatória das regiões
+  req.log.debug('Verificando campos de região preferencial');
   if (!preferenceRegion1 || !preferenceRegion2) {
     req.log.warn('Parâmetro faltando: preferenceRegion1 ou preferenceRegion2');
     return reply.status(400).send({
@@ -100,7 +106,6 @@ async function registerHandler(req, reply) {
       .input('getvip', mssql.Bit, 0)
       .input('password', mssql.NVarChar, hashedPassword)
       .input('nCash', mssql.Int, 0)
-      // Novos campos
       .input('preferenceRegion1', mssql.NVarChar, preferenceRegion1)
       .input('preferenceRegion2', mssql.NVarChar, preferenceRegion2)
       .query(`
@@ -140,7 +145,6 @@ async function registerHandler(req, reply) {
       .input('password', mssql.NVarChar, hashedPassword)
       .input('nCash', mssql.Int, 0)
       .input('isAdmin', mssql.Bit, isAdmin)
-      // Novos campos
       .input('preferenceRegion1', mssql.NVarChar, preferenceRegion1)
       .input('preferenceRegion2', mssql.NVarChar, preferenceRegion2)
       .query(`
