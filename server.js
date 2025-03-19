@@ -11,10 +11,10 @@ const registerPrivateRoutes = require('./routes/Private/privateRoutes');
 
 // Configurar o CORS
 fastify.register(cors, {
-  origin: '*', // Você pode especificar o domínio permitido aqui
-  methods: ['GET', 'POST', 'PUT', 'DELETE'],
+  origin: '*', 
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'x-api-key'], 
 });
-
 // Configurações do banco de dados
 fastify.decorate('dbConfig', dbConfig);
 
