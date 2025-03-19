@@ -12,10 +12,12 @@ function generateMD5(input, salt) {
 async function verifyApiKey(req, reply) {
   const apiKey = req.headers['x-api-key'];
   req.log.info("Verifying API key...");
+
   if (!apiKey || apiKey !== process.env.API_KEY) {
     req.log.warn('Acesso negado: API_KEY inválida ou ausente');
     return reply.status(401).send({ message: 'Unauthorized: Invalid API_KEY' });
   }
+
   req.log.info("API Key is valid.");
 }
 
@@ -23,26 +25,34 @@ async function verifyApiKey(req, reply) {
 const validPreferences = ["StageBR", "StageNA", "StageAS"];
 
 async function registerHandler(req, reply) {
-  // Log dos dados recebidos
-  req.log.info("Body received:", req.body);
+  // Log do body recebido
+  req.log.info("=== [Register Handler] BODY RECEIVED ===");
+  req.log.info(req.body);
 
   const {
     accountName,
     password,
-    // No front-end ainda chamamos de "preferenceRegion1"/"preferenceRegion2",
-    // mas internamente vamos tratar como "serverPreference1"/"serverPreference2"
+    // Do front-end vem "preferenceRegion1"/"preferenceRegion2",
+    // mas precisamos salvar no banco em "serverPreference1"/"serverPreference2"
     preferenceRegion1,
     preferenceRegion2,
     isAdmin = false,
   } = req.body;
 
-  const salt = process.env.SALT_FIX;
+  req.log.info(`[REGISTER] Campos recebidos: 
+    accountName="${accountName}", 
+    password=(oculto), 
+    preferenceRegion1="${preferenceRegion1}", 
+    preferenceRegion2="${preferenceRegion2}", 
+    isAdmin=${isAdmin}
+  `);
 
-  req.log.info('Iniciando handler de registro');
+  const salt = process.env.SALT_FIX;
+  req.log.info('Iniciando handler de registro...');
 
   // Validação de campos obrigatórios
   if (!accountName || !password) {
-    req.log.warn(`Faltando accountName ou password: ${accountName}, ${password}`);
+    req.log.warn(`Faltando accountName ou password: ${accountName}, (password oculto)`);
     return reply.status(400).send({
       message: 'Nome da conta e senha são obrigatórios.'
     });
@@ -85,21 +95,24 @@ async function registerHandler(req, reply) {
     // Hash da senha e userHash
     const hashedPassword = generateMD5(password, salt);
     const userHash = generateMD5(accountName + new Date().toISOString(), salt).substring(0, 6);
-    req.log.debug(`Hashed password gerada e userHash calculado: userHash=${userHash}`);
+    req.log.debug(`[REGISTER] hashedPassword gerada, userHash="${userHash}"`);
 
     // Verificar se o usuário já existe em Accounts
-    req.log.info(`Verificando duplicidade para o usuário: ${accountName}`);
+    req.log.info(`[REGISTER] Verificando duplicidade para o usuário: ${accountName}`);
     const existingUser = await mainPool.request()
       .input('accountName', mssql.NVarChar, accountName)
       .query('SELECT 1 FROM Accounts WHERE accountName = @accountName');
 
     if (existingUser.recordset.length > 0) {
-      req.log.warn(`Usuário ${accountName} já existe no banco de dados.`);
+      req.log.warn(`Usuário "${accountName}" já existe no banco de dados.`);
       return reply.status(400).send({ message: 'Usuário já existe.' });
     }
 
     // Inserção na tabela "Accounts"
-    req.log.info('Inserindo registro na tabela Accounts...');
+    req.log.info(`[REGISTER] Inserindo registro na tabela Accounts...
+      > serverPreference1="${preferenceRegion1}"
+      > serverPreference2="${preferenceRegion2}"`);
+
     await mainPool.request()
       .input('accountName', mssql.NVarChar, accountName)
       .input('isNexonId', mssql.Bit, 0)
@@ -139,9 +152,11 @@ async function registerHandler(req, reply) {
     req.log.info('Tabela Register_v1 acessível com sucesso.');
 
     // Se a tabela Register_v1 também tiver colunas serverPreference1/serverPreference2,
-    // faça o mesmo. Caso ainda sejam "preferenceRegion1"/"preferenceRegion2" lá,
-    // ajuste conforme o nome real da coluna.
-    req.log.info('Inserindo registro na tabela Register_v1...');
+    // faça o mesmo. Caso ainda sejam "preferenceRegion1"/"preferenceRegion2", ajuste.
+    req.log.info(`[REGISTER] Inserindo registro na tabela Register_v1...
+      > serverPreference1="${preferenceRegion1}"
+      > serverPreference2="${preferenceRegion2}"`);
+
     await webPool.request()
       .input('accountName', mssql.NVarChar, accountName)
       .input('userHash', mssql.NVarChar, userHash)
@@ -149,7 +164,6 @@ async function registerHandler(req, reply) {
       .input('password', mssql.NVarChar, hashedPassword)
       .input('nCash', mssql.Int, 0)
       .input('isAdmin', mssql.Bit, isAdmin)
-      // Ajuste se em Register_v1 as colunas também são serverPreference1/2:
       .input('serverPreference1', mssql.NVarChar, preferenceRegion1)
       .input('serverPreference2', mssql.NVarChar, preferenceRegion2)
       .query(`
@@ -175,14 +189,14 @@ async function registerHandler(req, reply) {
         )
       `);
 
-    req.log.info('Usuário registrado com sucesso!');
+    req.log.info('[REGISTER] Usuário registrado com sucesso!');
     return reply.status(201).send({
       message: 'Registro bem-sucedido!',
       userHash: userHash,
     });
 
   } catch (err) {
-    req.log.error(`Erro no processo de registro: ${err.message}`);
+    req.log.error(`[REGISTER] Erro no processo de registro: ${err.message}`);
     req.log.debug(err.stack);
     return reply.status(500).send({
       message: 'Erro ao conectar ao banco de dados ou inserir dados.'
