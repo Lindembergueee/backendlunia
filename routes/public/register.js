@@ -17,17 +17,17 @@ async function verifyApiKey(req, reply) {
   }
 }
 
-// Função principal do registro
+const validPreferences = ["StageBR", "StageNA", "StageAS"];
+
 async function registerHandler(req, reply) {
-  // Recebendo os campos do body, incluindo as novas preferências de região
   const {
     accountName,
     password,
-    isAdmin = false,
     preferenceRegion1,
     preferenceRegion2,
+    isAdmin = false,
   } = req.body;
-
+  
   const salt = process.env.SALT_FIX;
 
   req.log.info('Iniciando handler de registro');
@@ -35,13 +35,32 @@ async function registerHandler(req, reply) {
   // Validação de campos obrigatórios
   if (!accountName || !password) {
     req.log.warn('Parâmetro faltando: accountName ou password');
-    return reply
-      .status(400)
-      .send({ message: 'Nome da conta e senha são obrigatórios.' });
+    return reply.status(400).send({
+      message: 'Nome da conta e senha são obrigatórios.'
+    });
+  }
+
+  // Validação obrigatória das regiões
+  if (!preferenceRegion1 || !preferenceRegion2) {
+    req.log.warn('Parâmetro faltando: preferenceRegion1 ou preferenceRegion2');
+    return reply.status(400).send({
+      message: 'As preferências de região são obrigatórias.'
+    });
+  }
+
+  // Checagem se as preferências estão na lista válida
+  if (
+    !validPreferences.includes(preferenceRegion1) ||
+    !validPreferences.includes(preferenceRegion2)
+  ) {
+    req.log.warn('Valor inválido para região preferencial.');
+    return reply.status(400).send({
+      message: 'Valor inválido para região. Permitidos: StageBR, StageNA, StageAS.'
+    });
   }
 
   // Captura do IP do cliente
-  let clientIP = req.ip; // Se trustProxy estiver ativo
+  let clientIP = req.ip;
   if (!clientIP || clientIP === '127.0.0.1') {
     const forwardedFor = req.headers['x-forwarded-for'];
     clientIP = forwardedFor ? forwardedFor.split(',')[0].trim() : req.socket.remoteAddress;
@@ -82,8 +101,8 @@ async function registerHandler(req, reply) {
       .input('password', mssql.NVarChar, hashedPassword)
       .input('nCash', mssql.Int, 0)
       // Novos campos
-      .input('preferenceRegion1', mssql.NVarChar, preferenceRegion1 || null)
-      .input('preferenceRegion2', mssql.NVarChar, preferenceRegion2 || null)
+      .input('preferenceRegion1', mssql.NVarChar, preferenceRegion1)
+      .input('preferenceRegion2', mssql.NVarChar, preferenceRegion2)
       .query(`
         INSERT INTO Accounts (
           accountName,
@@ -107,7 +126,7 @@ async function registerHandler(req, reply) {
         )
       `);
 
-    // Testar acesso direto à tabela Register_v1
+    // Testar acesso à tabela Register_v1
     req.log.info('Testando acesso à tabela Register_v1...');
     await webPool.request().query('SELECT TOP 1 * FROM Web_v1.dbo.Register_v1');
     req.log.info('Tabela Register_v1 acessível com sucesso.');
@@ -122,8 +141,8 @@ async function registerHandler(req, reply) {
       .input('nCash', mssql.Int, 0)
       .input('isAdmin', mssql.Bit, isAdmin)
       // Novos campos
-      .input('preferenceRegion1', mssql.NVarChar, preferenceRegion1 || null)
-      .input('preferenceRegion2', mssql.NVarChar, preferenceRegion2 || null)
+      .input('preferenceRegion1', mssql.NVarChar, preferenceRegion1)
+      .input('preferenceRegion2', mssql.NVarChar, preferenceRegion2)
       .query(`
         INSERT INTO Web_v1.dbo.Register_v1 (
           accountName,
@@ -148,7 +167,7 @@ async function registerHandler(req, reply) {
       `);
 
     req.log.info('Usuário registrado com sucesso!');
-    reply.status(201).send({
+    return reply.status(201).send({
       message: 'Registro bem-sucedido!',
       userHash: userHash,
     });
@@ -156,9 +175,9 @@ async function registerHandler(req, reply) {
   } catch (err) {
     req.log.error(`Erro no processo de registro: ${err.message}`);
     req.log.debug(err.stack);
-    reply
-      .status(500)
-      .send({ message: 'Erro ao conectar ao banco de dados ou inserir dados.' });
+    return reply.status(500).send({
+      message: 'Erro ao conectar ao banco de dados ou inserir dados.'
+    });
   } finally {
     // Fechando conexões
     if (mainPool) {
@@ -172,7 +191,6 @@ async function registerHandler(req, reply) {
   }
 }
 
-// Exporta a rota e adiciona a validação de API_KEY como preHandler
 module.exports = function (fastify, opts, done) {
   fastify.post('/register', { preHandler: verifyApiKey }, registerHandler);
   done();
